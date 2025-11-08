@@ -1,0 +1,33 @@
+{
+  "name": "fibo",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --workspace=base",
+    "genesis": "npm run genesis --workspace=base",
+    "prod": "npm run prod --workspace=base",
+    "start": "npm run start --workspace=base",
+    "test": "npm run start --workspace=fibo-test",
+    "tmp": "npm run component --workspace=base"
+  },
+  "workspaces": [
+    "base",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "prettier": "3.5.3"
+  },
+  "version": "1.0.0",
+  "description": "## Getting Started",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dinoda/fibo.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Dinoda/fibo/issues"
+  },
+  "homepage": "https://github.com/Dinoda/fibo#readme"
+}

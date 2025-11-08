@@ -1,0 +1,32 @@
+{
+  "name": "base",
+  "type": "module",
+  "scripts": {
+    "dev": "ENV=dev node --watch index.js",
+    "discord": "node src/discord/index.js",
+    "prod": "ENV=prod node index.js",
+    "component": "ENV=dev node src/render/index.js",
+    "start": "node index.js",
+    "genesis": "node ./genesis/index.js",
+    "genesis-load": "node ./genesis/load.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "esbuild": "^0.24.2",
+    "esbuild-sass-plugin": "^3.3.1",
+    "express": "^5.1.0",
+    "ffmpeg-static": "^5.2.0",
+    "fibo-crud": "*",
+    "fibo-database-mariadb": "*",
+    "fibo-html-component-ssr": "*",
+    "fibo-logging": "*",
+    "fibo-server": "*",
+    "fibo-setup": "*",
+    "fibo-validate": "*",
+    "js-levenshtein": "^1.1.6",
+    "jsdom": "^27.0.0",
+    "htmlfy": "^1.0.0"
+  },
+  "packageManager": "yarn@4.5.3"
+}

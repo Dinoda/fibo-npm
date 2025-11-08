@@ -1,0 +1,16 @@
+{
+  "name": "fibo-server",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+	"fibo-common": "^1.0.0",
+	"express": "^5.1.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
