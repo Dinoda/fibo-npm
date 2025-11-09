@@ -13,7 +13,6 @@ const db = new Database({
 	user: process.env.DATABASE_USER,
 	password: process.env.DATABASE_PASSWORD,
 	connectionLimit: 5,
-  allowMultiQueries: true,
 });
 //import itemsData from './loadItemsData.js';
 const dir = './genesis';
@@ -23,7 +22,9 @@ readdir(dir).then(async (files) => {
   for (const file of files) {
     if (extname(file) == '.sql') {
       console.log(file);
-      await db.query(await readFile(join(dir, file)), {});
+      const content = await readFile(join(dir, file), 'utf-8');
+      console.log(content);
+      await db.query(content, []);
     }
   }
   //db.query(await read('

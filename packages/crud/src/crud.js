@@ -3,37 +3,61 @@ import Validator, { types as v } from 'fibo-validate';
 import CRUDValidationError from './exception/validationError.js';
 import CRUDError from './exception/CRUDError.js';
 
-const opeValidator = new Validator({
+const operationValid = new Validator({
   sql: v.requiredAnd(v.string),
-  // params: [Optional] Default to []
+  /**
+   * params {string[]|object}
+   * [Optional]
+   *
+   * ['id', 'name'] will give the data's "id" and "name" attribute in that order, the database will handle the element's typing.
+   *
+   * As an object, the keys are used as the array, and the value define the handling of the data's handling ('integer' and 'number', or a callback).
+   *
+   * Default to []
+   */
   params: v.nullableOr(v.or(v.array, v.object)),
-  // hydrator: [Optional] Name of the hydrator for this operation
-  // Default to option's "defaultHydrator" (or "defaultUpdateHydrator", if "select" is false)
-  hydrator: v.nullableOr(v.string),
-  // validator: [Optional] Name of the validator for this operation
-  // Default to option's "defaultValidator"
-  validator: v.nullableOr(v.string),
-  // select: [Optional] Default to "false", indicate if the operation is a "SELECT". If true, validation is processed after
-  // By default, the validation operation is performed before the query
-  select: v.nullableOr(v.boolean),
-  // delete: [Optional] Default to "false", indicate if the operation is a "DELETE" operation. Disabling validation.
-  delete: v.nullableOr(v.boolean),
+  /**
+   * hydrator {string|callback}
+   * [Optional]
+   *
+   * Hydrator or its name for this operation
+   *
+   * Default to option's "defaultHydrator" (TYPE_SELECT) or "defaultUpdateHydrator" (TYPE_UPDATE) (none for TYPE_DELETE)
+   */
+  hydrator: v.nullableOr(v.callable),
+  /**
+   * validator {string}
+   * [Optional]
+   *
+   * Name of the validator for this operation
+   *
+   * Default to options's "defaultValidator"
+   */
+  validator: v.nullableOr(v.callable),
+  /**
+   * type {integer}
+   * [Optional]
+   *
+   * Indicate the type of the operation, to ensure correct process.
+   *
+   * TYPE_SELECT move validation on the query's result, instead of the input data
+   * TYPE_DELETE remove any validation
+   *
+   * Default to TYPE_SELECT
+   */
+  type: v.nullableOr(v.integer),
 });
 
-const optValidator = new Validator({
-  // hydrators: [Optional] No hydration is mandatory, this is an object with hydration callables
-  hydrators: 'object',
-  // defaultHydrator: [Optional] Define the default hydrator from "hydrators"
-  // Default is no hydration, plain database returned objects
-  defaultHydrator: 'string',
-  // defaultUpdateHydrator: [Optional] Define the default hydrator for non-select operations
-  defaultUpdateHydrator: 'string',
-  // validators: [Optional] Some validators if needed
-  validators: 'object',
-  // defaultValidator: [Optional] Define the default validator
-  // Default to no validation
-  defaultValidator: 'string',
+const optionValidator = new Validator({
+  defaultHydrator: 'callable',
+  defaultUpdateHydrator: 'callable',
+  defaultValidator: 'callable',
 });
+
+const DEFAULT_OPTIONS = {
+  defaultHydrator: (a) => a,
+  defaultUpdateHydrator: (a) => a,
+};
 
 /**
  * => Request => Operation (Parameters, Object) => Hydration => Result => 
@@ -41,42 +65,45 @@ const optValidator = new Validator({
  *
  */
 export default class CRUD {
+
+  static TYPE_SELECT = 0;
+  static TYPE_UPDATE = 1;
+  static TYPE_INSERT = 2;
+  static TYPE_DELETE = 3;
+  static TYPE_OTHER = 4;
+
+  static PRE_VALIDATION = [
+    CRUD.TYPE_UPDATE,
+    CRUD.TYPE_INSERT,
+  ];
+
+  static POST_VALIDATION = [
+    CRUD.TYPE_SELECT,
+  ];
+
   constructor(database, operations, options = {}) {
     if (! (database instanceof Database)) {
       throw new CRUDError("database is expected to be an instance of Database");
     }
 
-    if (! optValidator.validate(options)) {
-      throw new CRUDError(`Options are not valid`, optValidator.detail(options));
+    if (! optionValidator.validate(options)) {
+      throw new CRUDError(`Options are not valid`, optionValidator.detail(options));
     }
+
+    this.options = {
+      ...DEFAULT_OPTIONS,
+      ...options,
+    };
 
     for (const k in operations) {
       const ope = operations[k];
-      if (! opeValidator.validate(ope)) {
-        throw new CRUDError(`Operation "${k}" is not a valid operation`, opeValidator.detail(ope));
+      if (! operationValid.validate(ope)) {
+        throw new CRUDError(`Operation "${k}" is not a valid operation`, operationValid.detail(ope));
       }
     }
 
     this.db = database;
     this.operations = operations;
-
-    if (options.hydrators) {
-      this.hydrators = options.hydrators;
-      this.defaultHydrator = options.defaultHydrator ? this.hydrators[options.defaultHydrator] : (a) => a;
-      this.defaultUpdateHydrator = options.defaultUpdateHydrator ? this.hydrators[options.defaultUpdateHydrator] : (a) => a.affectedRows > 0;
-    } else {
-      this.hydrators = {};
-      this.defaultHydrator = (a) => a;
-      this.defaultUpdateHydrator = (a) => a.affectedRows > 0;
-    }
-
-    if (options.validators) {
-      this.validators = options.validators;
-      this.defaultValidator = options.defaultValidator ? this.validators[options.defaultValidator] : null;
-    } else {
-      this.validators = {};
-      this.defaultValidator = null;
-    }
   }
 
   async callOperation(name, data) {
@@ -86,24 +113,21 @@ export default class CRUD {
       throw new CRUDError(`Unknown operation "${name}", couldn't proceed`);
     }
 
-    const validator = this.getValidator(ope);
+    const validator = ope.validator;
 
-    if (!ope.delete && !ope.select) {
-      if (validator && ! validator.validate(data)) {
+    // Validator pre-query for update and insert
+    if (CRUD.PRE_VALIDATION.includes(ope.type) && validator) {
+      if (! validator.validate(data)) {
         throw new CRUDValidationError(`Unvalid data provided for operation "${name}", failure to process operation`, validator.detail(data));
       }
     }
 
-
-    console.log(data);
     const fields = this.resolveFields(ope.params, data);
-
-    console.log(fields);
     const result = await this.db.query(ope.sql, fields);
+    const hydrated = this.hydrate(ope.hydrator, result, ope.type);
 
-    const hydrated = this.hydrate(ope.hydrator, result, ope.select);
-
-    if (!ope.delete && ope.select && validator) {
+    // Validator post-query for select only
+    if (CRUD.POST_VALIDATION.includes(ope.type) && validator) {
       const h = v.object(hydrated) ? Object.values(hydrated) : hydrated;
       for (const row of h) {
         if (! validator.validate(row)) {
@@ -129,6 +153,10 @@ export default class CRUD {
     return Object.keys(params).map((k) => {
       const type = params[k];
 
+      if (v.callable(type)) {
+        return type(data[k]);
+      }
+
       switch(type) {
         case 'number':
           const f = parseFloat(data[k]);
@@ -144,12 +172,12 @@ export default class CRUD {
     });
   }
 
-  hydrate(hydrator, data, select) {
+  hydrate(hydrator, data, type) {
     if (hydrator) {
-      return this.hydrators[hydrator](data);
+      return hydrator(data);
     }
 
-    return select ? this.defaultHydrator(data) : this.defaultUpdateHydrator(data);
+    return type === CRUD.TYPE_SELECT ? this.options.defaultHydrator(data) : this.options.defaultUpdateHydrator(data);
   }
 
   getValidator(ope) {
@@ -157,6 +185,20 @@ export default class CRUD {
       return this.validators[ope.validator];
     }
 
-    return this.defaultValidator;
+    return this.options.defaultValidator;
+  }
+
+  proxy() {
+    return new Proxy(this, {
+      get(target, prop, receiver) {
+        if (prop in target.operations) {
+          return (data) => {
+            return target.callOperation(prop, data);
+          };
+        } else if (typeof target.prop !== undefined) {
+          return Reflect.get(target, prop);
+        }
+      }
+    });
   }
 }

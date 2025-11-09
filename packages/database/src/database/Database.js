@@ -49,6 +49,7 @@ export default class Database {
    * @return None. This method should call "res" or "rej" before its end.
    */
   __query(res, rej, sql, params) {
+    console.log(res, rej, sql, params);
     throw new ImplementationError(
       'Method "query" or "__query" should be implemented in this class'
     );
